@@ -1,0 +1,42 @@
+# Comet WiFi - Automatiken fuer Home Assistant
+#
+# Topic-Platzhalter ersetzen:
+#   <KONTO> = Kontonummer (MQTT-Benutzername), z. B. 0012AB34
+#   <MAC>   = MAC ohne Doppelpunkte, gross, z. B. AABBCC112233
+#
+# Ab Home Assistant 2024.10 heissen die Schluessel "triggers"/"actions".
+# In aelteren Versionen "trigger"/"action" (Einzahl) verwenden.
+
+- id: comet_sollwert_quittieren
+  alias: "Comet: Sollwert quittieren"
+  description: "Fragt nach jedem Sollwert-Befehl Ist und Soll ab."
+  triggers:
+    - trigger: mqtt
+      topic: "02/0012AB34/AABBCC112233/S/A0"
+  conditions: []
+  actions:
+    - delay: "00:00:01"
+    - action: mqtt.publish
+      data:
+        topic: "02/0012AB34/AABBCC112233/S/AF"
+        payload: "#0b"
+        qos: 1
+        retain: false
+  mode: queued
+  max: 5
+
+- id: comet_istwert_abfragen
+  alias: "Comet: Istwert abfragen"
+  description: "Holt alle 2 Stunden Ist, Soll, Batterie und Flags."
+  triggers:
+    - trigger: time_pattern
+      hours: "/2"
+  conditions: []
+  actions:
+    - action: mqtt.publish
+      data:
+        topic: "02/0012AB34/AABBCC112233/S/AF"
+        payload: "#4B"
+        qos: 1
+        retain: false
+  mode: single

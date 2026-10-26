@@ -1,0 +1,24 @@
+{
+  "name": "Comet WiFi Bad",
+  "unique_id": "comet_wifi_aabbcc112233",
+  "device": {
+    "identifiers": ["comet_wifi_aabbcc112233"],
+    "name": "Comet WiFi Bad",
+    "manufacturer": "Eurotronic",
+    "model": "Comet WiFi"
+  },
+  "modes": ["heat"],
+  "mode_state_topic": "02/0012AB34/AABBCC112233/V/A0",
+  "mode_state_template": "heat",
+  "temperature_command_topic": "02/0012AB34/AABBCC112233/S/A0",
+  "temperature_command_template": "{{ '#%02x' | format((value | float * 2) | int) }}",
+  "temperature_state_topic": "02/0012AB34/AABBCC112233/V/A0",
+  "temperature_state_template": "{{ (value.split('#')[-1][0:2] | int(0, 16)) / 2 }}",
+  "current_temperature_topic": "02/0012AB34/AABBCC112233/V/A1",
+  "current_temperature_template": "{{ (value.split('#')[-1][0:2] | int(0, 16)) / 2 }}",
+  "temp_step": 0.5,
+  "precision": 0.5,
+  "min_temp": 8,
+  "max_temp": 28,
+  "retain": true
+}

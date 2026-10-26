@@ -1,0 +1,12 @@
+{
+  "name": "Temperatur",
+  "unique_id": "comet_wifi_aabbcc112233_temperatur",
+  "device": {
+    "identifiers": ["comet_wifi_aabbcc112233"]
+  },
+  "state_topic": "02/0012AB34/AABBCC112233/V/A1",
+  "value_template": "{{ (value.split('#')[-1][0:2] | int(0, 16)) / 2 }}",
+  "unit_of_measurement": "°C",
+  "device_class": "temperature",
+  "state_class": "measurement"
+}

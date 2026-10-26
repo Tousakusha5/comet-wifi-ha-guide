@@ -1,0 +1,16 @@
+# Betriebssystem
+.DS_Store
+Thumbs.db
+
+# Logs und Mitschnitte (enthalten Zugangsdaten!)
+*.log
+*.pcap
+*.pcapng
+capture*
+
+# Python
+__pycache__/
+*.pyc
+
+# Lokale Kopien mit echten Zugangsdaten
+secrets.local.*
