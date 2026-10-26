@@ -1,5 +1,7 @@
 # Eurotronic Comet WiFi in Home Assistant einbinden
 
+**Deutsch** · [English](README.en.md)
+
 Inoffizielle Community-Anleitung, um den Heizkörperthermostat **Eurotronic
 Comet WiFi** (WLAN/MQTT) komplett lokal in Home Assistant zu betreiben — ohne
 Cloud, ohne Hersteller-App im Alltag. Keine Verbindung zu Eurotronic.
@@ -688,6 +690,7 @@ abhängt.
 | Datei | Inhalt |
 |---|---|
 | `README.md` | diese Anleitung |
+| `README.en.md` | englische Fassung |
 | `examples/climate-discovery.json` | Discovery-Payload für die Klima-Entität |
 | `examples/temperature-sensor-discovery.json` | Discovery-Payload für die Ist-Temperatur |
 | `examples/battery-sensor-discovery.json` | Discovery-Payload für die Batterie |
