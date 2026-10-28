@@ -13,7 +13,7 @@ At the end you have:
 - a temperature sensor that Alexa can answer by voice,
 - and no cloud dependency inside your own network.
 
-> **Status:** 2026-10-26, tested with Home Assistant 2026.10.2 and the
+> **Status:** 2026-10-28, tested with Home Assistant 2026.10.2 and the
 > Mosquitto add-on 7.1.2. The values in the examples (`0012AB34`,
 > `AABBCC112233`) are fictional placeholders — replace them with your own.
 
@@ -162,6 +162,23 @@ The plaintext of the `CONNECT` packet contains username and password.
 > Only use this on your own device. The password belongs in the broker — not in
 > a repository and not in a guide.
 
+### Variant C: Android app (no Python, no DNS redirect)
+
+If you have neither Python nor a machine with a free port 1883 at hand, you can
+also capture on the phone that runs the Eurotronic app:
+
+1. Install **NetworkCapture** (or a comparable capture app) and allow its VPN
+   capture.
+2. Open the Eurotronic app and sign in.
+3. In the capture, look for the connection on port **1883** and open the
+   `CONNECT` packet — username and password are in plaintext.
+
+**Limitation:** you are looking at the *app's* session, not the thermostat's.
+The username is usually the same account number, but the password may differ.
+If the broker login fails afterwards, use variant A — it reads the real device
+`CONNECT`. Also note that a capture app is a third-party tool with far-reaching
+permissions: install it temporarily and remove it afterwards.
+
 ---
 
 ## 5. Add the broker login
@@ -242,6 +259,18 @@ address=/mqtt4.eurotronic.com/192.168.1.10
 ```bash
 sudo systemctl restart dnsmasq     # or: pihole restartdns
 ```
+
+### NextDNS (no DNS server of your own)
+
+If your router cannot hold custom entries and you do not want to run an AdGuard
+or Pi-hole box, the same ten rewrites work in the cloud: NextDNS →
+**Settings → Rewrites**, one entry per `mqtt`/`mqtt1`–`mqtt4` under
+`.eurotronic.io` and `.eurotronic.com`, all pointing at your broker IP.
+
+Requirement: the thermostat must actually use NextDNS as its resolver — set it
+as the upstream in your router or hand it out via DHCP. If the router itself
+resolves via DoH/DoT, the rewrites may not apply; in that case only a local DNS
+server will do.
 
 ### Why not a wildcard?
 
@@ -468,8 +497,9 @@ Without a request the sensor stays empty — the automations in
 
 ## 10. Automations
 
-Two rules close the loop. Without them setting a value still works, but HA
-shows the new value hours later (or never).
+Two rules close the loop (a third is optional, see
+[§10.4](#104-optional-answer-the-connection-test-not-tested)). Without them
+setting a value still works, but HA shows the new value hours later (or never).
 
 ### 10.1 Acknowledge the setpoint
 
@@ -540,6 +570,39 @@ retain: true
 
 The thermostat then receives the request on **every** connection and reports
 its state immediately — handy after a power loss or restart.
+
+### 10.4 Optional: answer the connection test (not tested)
+
+In some setups — especially with older firmware — the connection is considered
+more stable if the broker acknowledges the thermostat's connection test. The
+device sends `#COMM-TEST` on `S/XX`.
+
+**In the setup tested here this was not necessary.** Only add the rule if you
+still see dropouts despite complete DNS entries
+([§6](#6-redirect-dns--the-decisive-step)).
+
+```yaml
+- id: comet_comm_test_beantworten
+  alias: "Comet: answer connection test"
+  description: "Acknowledges the thermostat's connection test (S/XX)."
+  triggers:
+    - trigger: mqtt
+      topic: "02/<ACCOUNT>/<MAC>/S/XX"
+  conditions: []
+  actions:
+    - delay: "00:01:00"
+    - action: mqtt.publish
+      data:
+        topic: "02/<ACCOUNT>/<MAC>/S/XX"
+        payload: "#COMM-TEST"
+        qos: 1
+        retain: false
+  mode: single
+```
+
+- Trigger and target topic are **identical**. Without `mode: single` and the
+  delay, the rule answers its own reply and loops — which costs battery.
+- If the thermostat wakes up more often than before, remove the rule again.
 
 ---
 
@@ -625,6 +688,7 @@ is unreliable for voice queries of this kind.
 | Battery stays empty | `#0b` does not include it | Use `#4B` ([§11](#11-protocol-reference)) |
 | Alexa cannot find the sensor | Bridge not restarted / filter not set | Filter + restart + "Discover devices" |
 | `exceeded timeout` in the broker log | Thermostat is asleep or lost the connection | Harmless if it reports again soon — frequent timeouts point to the DNS gap |
+| Thermostat connects but keeps dropping again | Firmware expects an answer to `S/XX #COMM-TEST` | [§10.4](#104-optional-answer-the-connection-test-not-tested) — check the ten DNS names first |
 
 **Always start with:** the broker log. If it shows `New client connected … as
 da16x02…`, the connection is fine and the problem is in HA. If the entry is
@@ -699,6 +763,20 @@ The example files contain **fictional** data (`0012AB34`, `AABBCC112233`).
 Before using them, replace `0012AB34` with your account number and
 `AABBCC112233` with your MAC address (no colons, upper case). The files use
 German labels (`name`, `alias`) — those are display names, change them freely.
+
+---
+
+## Background
+
+The basic idea — redirecting the thermostat's DNS to your own broker and
+tapping the topics — comes from the Home Assistant forum:
+[Integrating Comet Wifi – basic functionality](https://community.home-assistant.io/t/integrating-comet-wifi-basic-functionality/493474)
+(2022). That thread documented the topics publicly for the first time.
+
+Two things differ deliberately: the thread only redirects `mqtt.` and
+`mqtt1.eurotronic.io` and therefore describes exactly the dropouts it never got
+rid of. And it publishes credentials in plaintext — this guide reads them
+locally with a script instead.
 
 ---
 

@@ -13,7 +13,7 @@ Am Ende hast du:
 - einen Temperatursensor, den auch Alexa per Sprache beantworten kann,
 - und keinen Cloud-Zwang mehr im eigenen WLAN.
 
-> **Stand:** 2026-10-26, getestet mit Home Assistant 2026.10.2 und dem
+> **Stand:** 2026-10-28, getestet mit Home Assistant 2026.10.2 und dem
 > Mosquitto-Add-on 7.1.2. Die Werte in den Beispielen (`0012AB34`,
 > `AABBCC112233`) sind fiktive Beispieldaten — ersetze sie
 > durch deine.
@@ -162,6 +162,24 @@ Im Klartext des `CONNECT`-Pakets stehen Benutzername und Passwort.
 > Nur für das eigene Gerät verwenden. Das Passwort gehört in den Broker, nicht
 > ins Repository und nicht in eine Anleitung.
 
+### Variante C: Android-App (ohne Python und ohne DNS-Umleitung)
+
+Wer kein Python und keinen Rechner mit freiem Port 1883 zur Hand hat, kann den
+Mitschnitt auch auf dem Handy machen, auf dem die Eurotronic-App läuft:
+
+1. **NetworkCapture** (oder eine vergleichbare Mitschnitt-App) installieren und
+   den VPN-Mitschnitt erlauben.
+2. Eurotronic-App öffnen und anmelden.
+3. Im Mitschnitt die Verbindung auf Port **1883** suchen und das `CONNECT`-Paket
+   öffnen — Benutzername und Passwort stehen im Klartext.
+
+**Einschränkung:** Du siehst hier die Sitzung der *App*, nicht die des Reglers.
+Meist ist der Benutzername dieselbe Kontonummer; ein abweichendes Passwort ist
+aber möglich. Scheitert die Anmeldung im Broker danach, nimm Variante A — die
+liest das echte Geräte-CONNECT. Außerdem ist eine Mitschnitt-App ein
+Drittanbieter-Werkzeug mit weitreichenden Rechten: nur vorübergehend
+installieren und danach wieder entfernen.
+
 ---
 
 ## 5. Broker-Login anlegen
@@ -242,6 +260,18 @@ address=/mqtt4.eurotronic.com/192.168.1.10
 ```bash
 sudo systemctl restart dnsmasq     # bzw. pihole restartdns
 ```
+
+### NextDNS (ohne eigenen DNS-Server)
+
+Kann dein Router keine eigenen Einträge und willst du keinen AdGuard- oder
+Pi-hole-Rechner betreiben, gehen dieselben zehn Umschreibungen auch in der
+Cloud: NextDNS → **Settings → Rewrites**, je `mqtt`/`mqtt1`–`mqtt4` unter
+`.eurotronic.io` und `.eurotronic.com` auf deine Broker-IP.
+
+Bedingung: Der Regler muss NextDNS auch als Resolver benutzen — also im Router
+als Upstream eintragen oder per DHCP verteilen. Löst der Router selbst per
+DoH/DoT auf, greifen die Rewrites unter Umständen nicht; dann bleibt nur ein
+lokaler DNS-Server.
 
 ### Warum keine Wildcard?
 
@@ -468,8 +498,10 @@ Ohne Abfrage bleibt der Sensor leer — er wird von den Automatiken in
 
 ## 10. Automatiken
 
-Zwei Regeln schließen den Kreis. Ohne sie funktioniert das Setzen zwar, aber HA
-zeigt den neuen Wert erst Stunden später (oder nie).
+Zwei Regeln schließen den Kreis (eine dritte ist optional, siehe
+[§10.4](#104-optional-verbindungstest-beantworten-nicht-getestet)). Ohne sie
+funktioniert das Setzen zwar, aber HA zeigt den neuen Wert erst Stunden später
+(oder nie).
 
 ### 10.1 Sollwert quittieren
 
@@ -540,6 +572,40 @@ retain: true
 
 Dann bekommt der Regler die Abfrage bei **jeder** Verbindung und meldet sofort
 seinen Zustand — praktisch nach Stromausfall oder Neustart.
+
+### 10.4 Optional: Verbindungstest beantworten (nicht getestet)
+
+In manchen Aufbauten — vor allem mit älteren Firmware-Ständen — gilt die
+Verbindung als stabiler, wenn der Broker den Verbindungstest des Reglers
+quittiert. Das Gerät schickt dabei `#COMM-TEST` auf `S/XX`.
+
+**In dem hier getesteten Aufbau war das nicht nötig.** Nimm die Regel nur dazu,
+wenn du trotz vollständiger DNS-Einträge ([§6](#6-dns-umbiegen--der-entscheidende-schritt))
+weiterhin Aussetzer siehst.
+
+```yaml
+- id: comet_comm_test_beantworten
+  alias: "Comet: Verbindungstest beantworten"
+  description: "Antwortet auf den Verbindungstest des Reglers (S/XX)."
+  triggers:
+    - trigger: mqtt
+      topic: "02/<KONTO>/<MAC>/S/XX"
+  conditions: []
+  actions:
+    - delay: "00:01:00"
+    - action: mqtt.publish
+      data:
+        topic: "02/<KONTO>/<MAC>/S/XX"
+        payload: "#COMM-TEST"
+        qos: 1
+        retain: false
+  mode: single
+```
+
+- Trigger- und Ziel-Topic sind **identisch**. Ohne `mode: single` und die
+  Verzögerung antwortet die Regel auf die eigene Antwort und läuft im Kreis —
+  das kostet Batterie.
+- Wacht der Regler danach häufiger auf als vorher, nimm die Regel wieder raus.
 
 ---
 
@@ -625,6 +691,7 @@ App an, ist für Sprachabfragen dieser Art aber unzuverlässig.
 | Batterie bleibt leer | `#0b` fragt sie nicht mit ab | `#4B` verwenden ([§11](#11-protokoll-referenz)) |
 | Alexa findet den Sensor nicht | Bridge nicht neu gestartet / Filter nicht gesetzt | Filter + Restart + „Geräte suchen" |
 | `exceeded timeout` im Broker-Log | Regler schläft oder hat die Verbindung verloren | Unkritisch, wenn er sich bald neu meldet — häufige Timeouts deuten auf die DNS-Lücke hin |
+| Regler verbindet, fliegt aber regelmäßig wieder raus | Firmware erwartet eine Antwort auf `S/XX #COMM-TEST` | [§10.4](#104-optional-verbindungstest-beantworten-nicht-getestet) — vorher die zehn DNS-Namen prüfen |
 
 **Erste Diagnose immer:** Broker-Log. Steht dort ein `New client connected …
 as da16x02…`, ist die Verbindung in Ordnung und das Problem liegt in HA.
@@ -700,6 +767,20 @@ abhängt.
 Die Beispieldateien enthalten **fiktive** Daten (`0012AB34`, `AABBCC112233`).
 Vor dem Verwenden `0012AB34` durch deine Kontonummer und `AABBCC112233` durch
 deine MAC-Adresse (ohne Doppelpunkte, Großbuchstaben) ersetzen.
+
+---
+
+## Hintergrund
+
+Die Grundidee — DNS des Reglers auf den eigenen Broker umbiegen und die Topics
+abgreifen — stammt aus dem Home-Assistant-Forum:
+[Integrating Comet Wifi – basic functionality](https://community.home-assistant.io/t/integrating-comet-wifi-basic-functionality/493474)
+(2022). Dort sind die Topics erstmals öffentlich dokumentiert.
+
+Zwei Dinge unterscheiden sich bewusst: Der Thread biegt nur `mqtt.` und
+`mqtt1.eurotronic.io` um und beschreibt deshalb genau die Aussetzer, die er
+selbst nicht loswurde. Und er veröffentlicht Zugangsdaten im Klartext — hier
+steht stattdessen ein Skript, das sie lokal ausliest.
 
 ---
 
